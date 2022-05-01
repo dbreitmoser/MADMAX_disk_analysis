@@ -152,7 +152,7 @@ def remove_outliers(df, mode='z', cut_threshold=100):
 #========================================================
 #       Error Definition
 #========================================================
-LAO_ERROR = 12*1e-3 #m
+LAO_ERROR = 0.0 #*12*1e-3 #m
 def nan_mean(array):
     # return mean even if array has NaN values
     masked_array = np.ma.array(array, mask=np.isnan(array)) # Use a mask to mark the NaNs

@@ -484,6 +484,9 @@ def plot_R_RMS_vs_time(result_df):
     ax_R.set_title('R vs time')
     ax_R.set_ylabel('R: Min - Max [µm]')
     ax_R.grid(True)
+    R_mean = result_df.R.mean()
+    ax_R.fill_between(result_df.datetime, R_mean - 12, R_mean + 12, alpha=0.2, color='tab:orange')
+    ax_R.set_ylim(0,100)
 
     #* Plot RMS (std(z_mean)) vs time
     ax_RMS = axes[1]
@@ -492,5 +495,14 @@ def plot_R_RMS_vs_time(result_df):
     ax_RMS.set_title('RMS vs time')
     ax_RMS.set_ylabel('RMS [µm]')
     ax_RMS.grid(True)
+    RMS_mean = result_df.RMS.mean()
+    RMS_std = result_df.RMS.std()
+    RMS_ylim_lower = RMS_mean - 3*RMS_std
+    RMS_ylim_upper = RMS_mean + 3*RMS_std
+    # print(f'RMS_STD = {rms_std}')
+    # print(f'RMS_ylim_upper = {RMS_ylim_upper}')
+    if RMS_ylim_lower < 0: RMS_ylim_lower = 0
+    ax_RMS.set_ylim(bottom=RMS_ylim_lower, top=RMS_ylim_upper)
+    ax_RMS.axhline(RMS_mean, ls='--', c='black')
     plt.tight_layout()    
     return fig, axes
