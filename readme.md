@@ -10,6 +10,7 @@ Packages required to run the notebooks:
  - pathlib
  - pytz
  - openpyxl
+ - matplotlib
 
 Measurements come in .txt files with the following information:
 
@@ -42,5 +43,3 @@ Column 6
 --------
 Z-coordinate
 
-dependencies: 
-openpyxl, numpy, pandas, seaborn, matplotlib
