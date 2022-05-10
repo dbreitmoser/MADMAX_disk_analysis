@@ -3,6 +3,14 @@
 This is a project, dedicated to archive and analyse data gathered by flatness
 measurements for the MADMAX disk. 
 
+Packages required to run the notebooks: 
+ - pandas
+ - numpy
+ - seaborn
+ - pathlib
+ - pytz
+ - openpyxl
+
 Measurements come in .txt files with the following information:
 
 Column 1
