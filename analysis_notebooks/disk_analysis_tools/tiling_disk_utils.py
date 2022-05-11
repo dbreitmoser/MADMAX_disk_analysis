@@ -1,7 +1,5 @@
 import pandas as pd
 import numpy as np 
-from scipy.stats import median_abs_deviation as mad  
-mad_str = 'median_abs_deviation'
 import pytz
 local_tz = pytz.timezone('Europe/Berlin')
 
@@ -274,20 +272,20 @@ def quad_sum(s_1, s_2):
     s_2_sq = np.power(s_2,2)
     sums = np.add(s_1_sq, s_2_sq).astype(float)
     return np.sqrt(sums)
-
-def difference_data(df_1, df_2): 
-    '''Takes only pivot df from the point table or hex table function!'''    
-    delta_df = df_1 - df_2
-    delta_df['x', 'mean'] = df_1['x', 'mean'] 
-    delta_df['y', 'mean'] = df_1['y', 'mean'] 
-    delta_df['z', 'std'] = quad_sum(df_1['z', 'std'], df_2['z', 'std'])
-    return delta_df
-
-def z_diff_raw_data(df_1, df_2): 
-    '''Returns measurement dataframe with z_new = df_1.z - df_2.z'''
-    delta_df = df_1 
-    delta_df['z'] = df_1['z'] - df_2['z']
-    return delta_df
+#! Not used anymore
+# def difference_data(df_1, df_2): 
+#     '''Takes only pivot df from the point table or hex table function!'''    
+#     delta_df = df_1 - df_2
+#     delta_df['x', 'mean'] = df_1['x', 'mean'] 
+#     delta_df['y', 'mean'] = df_1['y', 'mean'] 
+#     delta_df['z', 'std'] = quad_sum(df_1['z', 'std'], df_2['z', 'std'])
+#     return delta_df
+#! Not usd anymore
+# def z_diff_raw_data(df_1, df_2): 
+#     '''Returns measurement dataframe with z_new = df_1.z - df_2.z'''
+#     delta_df = df_1 
+#     delta_df['z'] = df_1['z'] - df_2['z']
+#     return delta_df
 
 
 def combine_mean_measurements(data_signal, data_background, z_mean_col='z_mean', z_err_col='z_err'):
@@ -365,3 +363,34 @@ def calc_measurement_date_and_time(dataframe, timemode='unix_time', time_format=
     mean_datetime.tz_convert('Europe/Berlin')
     str_datetime = mean_datetime.strftime(format=time_format)
     return str_datetime
+
+# ------------- microscope helpers ------------
+
+def find_distance(row, df_coords): 
+    """returns dict with adjecent points label & coordinates for a row 
+       used as helper function for add_adjecent_points"""
+    distances = {'adj_x1':None, 'adj_x2':None, 'adj_y1':None , 'adj_y2':None,
+                 'dist_1':None, 'dist_2':None, 'label_1':None, 'label_2':None}
+    point_distance = 20 #mm
+    def distance(x1,y1,x2,y2): return np.sqrt((x1-x2)**2 + (y1-y2)**2) # euclidian distance
+    i = 1
+    for coord_row in df_coords.itertuples(): 
+        d = distance(row.x, row.y, coord_row.x, coord_row.y)
+        if 1 < d < point_distance:
+            distances[f'adj_x{i}'] = coord_row.x
+            distances[f'adj_y{i}'] = coord_row.y
+            distances[f'dist_{i}'] = d
+            distances[f'label_{i}'] = coord_row.arm_label
+            i = i+1
+    return distances
+
+def add_adjecent_points(df, df_coords):
+    """returns dataframe with adjecent points label and coordinates (from  df_coords) for each arm_label in df
+       used for microscope data visualisation """
+    merge_df = pd.DataFrame(columns=['arm_label', 'adj_x1', 'adj_y1', 'dist_1', 'adj_x2', 'adj_y2', 'dist_2'])
+    for row in df.itertuples():
+        distances = find_distance(row, df_coords)
+        distances['arm_label'] = row.arm_label
+        distances = pd.DataFrame([distances])
+        merge_df = pd.concat([merge_df, distances], ignore_index=True)
+    return merge_df
