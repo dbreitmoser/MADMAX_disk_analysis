@@ -235,12 +235,14 @@ def query_temps_from_db(db_path, starttime, endtime):
     c.execute(sql_query)
     t = c.fetchall()
     #* Read into dataframe
-    temp_humid_db = pd.DataFrame(t, columns=["date",
-                         "T_plate",
-                         "T_ambient",
-                         "humidity", 
-                         "dewpoint", 
-                         "fan_speed"])
+    temp_humid_db = pd.DataFrame(t,
+                        columns=["date",
+                                "T_plate",
+                                "T_ambient",
+                                "humidity", 
+                                "dewpoint", 
+                                "fan_speed"]
+                            )
     temp_humid_db['datetime'] = temp_humid_db['date'].apply(lambda x: pd.to_datetime(x))
     temp_humid_db['datetime'].dt.tz_localize('Europe/Berlin')
     return temp_humid_db
@@ -286,8 +288,7 @@ def quad_sum(s_1, s_2):
 #     delta_df = df_1 
 #     delta_df['z'] = df_1['z'] - df_2['z']
 #     return delta_df
-
-
+#! Depreached-------------------------------
 def combine_mean_measurements(data_signal, data_background, z_mean_col='z_mean', z_err_col='z_err'):
     # Takes only point_tables
     delta_df = data_signal.copy()
@@ -298,7 +299,43 @@ def combine_mean_measurements(data_signal, data_background, z_mean_col='z_mean',
         delta_df['unix_time'] = data_signal['unix_time']
     delta_df[z_err_col] = quad_sum(data_signal[z_err_col], data_background[z_err_col])
     return delta_df 
-
+#!-----------------------------------------
+# substitution for old combine_mean_measurements
+def subtract_mean_measurements(df_signal,
+                               df_background,
+                               z_mean_col='z_mean',
+                               z_err_col='z_err'): 
+    '''input: 
+        - df_signal: filtered singal point table of measurement
+        - df_background: filtered background point table of measurement
+        - z_mean_col: name of z_mean column
+        - z_err_col: name of z_error column
+        
+        returns: delta df
+            - merged dataframe on matching hexagon and point number
+            - adds column of subtracted mean z values as z_mean_res 
+            - adds column of errorpropagated z measurement error'''
+    if not ('hex_point' in df_signal.keys()):
+        df_signal['hex_point'] = df_signal.apply(lambda row: str(int(row.hex_nr))+'_'+str(int(row.point)), axis=1)
+    if not ('hex_point' in df_background.keys()):
+        df_background['hex_point'] = df_background.apply(lambda row: str(int(row.hex_nr))+'_'+str(int(row.point)), axis=1)
+    # delta_df = df_signal.copy()
+    delta_df = pd.merge(df_signal,
+                        df_background[[z_mean_col, z_err_col, 'hex_point']],
+                        on='hex_point',
+                        suffixes=('_s', '_bg')
+                        )
+    delta_df['z_mean'] = delta_df.apply(
+                            lambda row: row[f'{z_mean_col}_s'] - row[f'{z_mean_col}_bg'],
+                            axis=1)
+    delta_df['z_err'] = delta_df.apply(
+                            lambda row: quad_sum(
+                                        row[f'{z_err_col}_s'],
+                                        row[f'{z_err_col}_bg']
+                                        ),
+                            axis=1)
+    delta_df.drop(columns=['hex_point'], inplace=True)
+    return delta_df
 
 def subtract_mean(data):
     mean_data = np.mean(data)
