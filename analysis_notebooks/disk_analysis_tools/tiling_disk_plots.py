@@ -23,7 +23,7 @@ def coordinates_plot(dataframe, hexgrid_path=hexgrid_path):
     """Plot only to show the coordinates of given measurement"""
     fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(12,12))
     ax.scatter(dataframe['x'], dataframe['y'], s=5, marker='x')
-    plot_hexgrid(hexgrid_path)
+    plot_hexgrid(hexgrid_path, ax)
     ax.set_xlabel("x [mm]", fontsize=20)
     ax.set_ylabel("y [mm]", fontsize=20)
     ax.tick_params(labelsize=20)
@@ -42,11 +42,12 @@ def full_hexagon_plot(
     cmap = 'turbo',
     hexgrid_path = hexgrid_path, 
     figsize=(12,12),
-    cbar_title = "height [$\mu$m]",
+    cbar_title = "height",
     fig = None, 
     ax = None,
     gs=None,
     xylabels=True,
+    unit='µm'
     ):
     """Plot the data with colorscale. Choose hexgrid to include the map of the gluing machine"""
     if (fig == None) & (ax == None):
@@ -56,7 +57,7 @@ def full_hexagon_plot(
         #* plots the central coordinate of each hexagon
         hexgrid_position_path = Path.p.parent / 'coordinates' / 'hexagon-position.txt' 
         origin_df = tdu.read_coords_txt(hexgrid_position_path)
-        ax.scatter(origin_df['x'], origin_df['y'], c='tab:green', marker='x') #! hardcoded origin_df!
+        ax.scatter(origin_df['x'], origin_df['y'], c='tab:green', marker='x')
     
     if hexgrid:
         #* plots the hexagonal map underneath the measurements 
@@ -67,10 +68,16 @@ def full_hexagon_plot(
     #* Colorscale centered at 0, spans 200 um across
     colornorm = TwoSlopeNorm(vcenter=cbar_norm[1], vmax=cbar_norm[2], vmin=cbar_norm[0]) 
 
-    cp = ax.scatter(dataframe['x'], dataframe['y'], c=dataframe[mode], cmap=cmap, norm=colornorm, s=size, marker=marker)
+    cp = ax.scatter(dataframe['x'],
+                    dataframe['y'],
+                    c=dataframe[mode],
+                    cmap=cmap,
+                    norm=colornorm,
+                    s=size,
+                    marker=marker)
     c_bar = fig.colorbar(cp, cax=cax) # Add a colorbar to a plot
     c_bar.ax.tick_params(labelsize=18)
-    c_bar.ax.set_ylabel(cbar_title, fontsize=18)
+    c_bar.ax.set_ylabel(f'{cbar_title} [{unit}]', fontsize=18)
 
     if xylabels:
         ax.set_xlabel("x [mm]", fontsize=18)
@@ -150,7 +157,6 @@ def plot_table_hexagon_flatness(
     c_bar.ax.tick_params(labelsize=18)
     c_bar.ax.set_ylabel(f"height [{unit}]", fontsize=18)
     ax_trip.tick_params(axis="both",direction="in")
-    
 
     ax_xscatt.scatter(dataframe.x, dataframe[mode], s=3 )
     ax_xscatt.tick_params(axis="x", left=True, right=True, labelleft=False, labelright=True)
@@ -305,11 +311,13 @@ def ts_hist(
     mode='z',
     figsize=(7,6),
     color_plot='tab:blue',  
-    x_label = 'z [µm]', 
+    x_label = 'z', 
     plot_bins='auto',
     fig_ax = None, 
     hist_stat='count',
-    kde=False
+    kde=False, 
+    unit='µm',
+    title='title'
             ): 
     if fig_ax == None:
         fig, ax = plt.subplots(figsize=figsize, nrows=1, ncols=1)
@@ -319,9 +327,11 @@ def ts_hist(
                  stat='count', label=label, fill=True, alpha=0.4, 
                  bins=plot_bins,)
 
-    ax.set_xlabel(x_label)
+    ax.set_xlabel(f'{x_label} [{unit}]')
     plt.legend(bbox_to_anchor=(1, 1), loc='best', borderaxespad=0.4,  fontsize=14)
     plt.grid(c="grey", ls="-", lw=1, alpha=0.3)
+    if title!=None:
+        ax.set_title(title)
     return fig, ax
 
 #? no fits needed anymore ¯\_(ツ)_/¯
@@ -506,3 +516,42 @@ def plot_R_RMS_vs_time(result_df):
     ax_RMS.axhline(RMS_mean, ls='--', c='black')
     plt.tight_layout()    
     return fig, axes
+
+def lw_repr(width, norm_width=300): return np.exp(width/norm_width) / 5
+def plot_microscope_glue_canals(dataframe,
+                                mode='gap_relative',
+                                title='Steelplate gap data',
+                                cbar_norm = (-100,0,100),
+                                cmap = 'turbo',
+                                hexgrid_path = hexgrid_path,
+                                figsize=(12,12),
+                                cbar_title = "glue penetration depth [$\mu$m]",
+                                lw_repr = lw_repr):
+    from matplotlib.colors import TwoSlopeNorm
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    fig, ax = plt.subplots(ncols=1, nrows=1, figsize=figsize)
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    # #* Colorscale centered at 0, spans 200 um across
+    colornorm = TwoSlopeNorm(vcenter=cbar_norm[1], vmax=cbar_norm[2], vmin=cbar_norm[0]) 
+
+    cp = ax.scatter(dataframe['x'], dataframe['y'], c=dataframe[mode],
+                    cmap=cmap, norm=colornorm, s=1, marker='o', alpha=1)
+    c_bar = fig.colorbar(cp, cax=cax) # Add a colorbar to a plot
+    c_bar.ax.tick_params(labelsize=18)
+    c_bar.ax.set_ylabel(cbar_title, fontsize=18)
+    plot_hexgrid(hexgrid_path, ax)
+    for row in dataframe.itertuples():   #? Itterate over rows and be able to acces row attributes as usual
+        xs = [row.x, row.adj_x1, row.adj_x2]
+        ys = [row.y, row.adj_y1, row.adj_y2]
+        # def lw_repr(width, norm_width=300): return np.exp(width/norm_width) / 5
+        ax.plot(xs, ys,
+                c=cp.to_rgba(dataframe.loc[dataframe.arm_label==row.arm_label,:].gap_relative), #* color from scatterplot
+                lw=f'{lw_repr(row.glue_width)}' #* linewidth represents width of glue trace on triplet
+                )
+    if title!=None:
+        ax.set_title(title)
+
+    ax.set_xlabel("x [mm]", fontsize=18)
+    ax.set_ylabel("y [mm]", fontsize=18)
+    return fig,ax
