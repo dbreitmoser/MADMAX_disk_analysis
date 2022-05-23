@@ -34,6 +34,9 @@ def read_single_measurement(folder, filename, old=False):
         df = read_measurement_txt_old(file_path)
         return df
     df = read_measurement_txt(file_path)
+    print('Reading data...')
+    df = df_convert_unix_to_datetime(df)
+    print('Reading done')
     return df
 
 
@@ -103,17 +106,26 @@ def add_triplet_color_label(dataframe):
     dataframe['trip_color'] = np.nan
     dataframe['trip_color'] = dataframe.apply(lambda row: label_trip_color(row), axis=1)
     return dataframe
-# #! outdated? 
-# def apply_func_per_run(dataframe, func, pivot=False): 
-#     return_df = pd.DataFrame()
-#     for run in dataframe.run_nr.unique(): 
-#         run_df = dataframe.loc[dataframe['run_nr']==run, :].copy()
-#         run_df = func(run_df)
-#         if pivot: run_df['run_nr'] = run
-#         return_df = pd.concat([return_df, run_df])
-#     del dataframe
-#     return return_df
-# #!---
+
+
+def filter_data(df,
+                point_cut=True, # Cuts point 1
+                mm_cut=True, # Cuts at -100mm
+                median_hex_cut=True, # Cuts at 100µm from median per hexagon
+                ):
+    """Applies standard cuts(filters) on the raw z data
+       returns: filtered dataframe"""
+    #* Apply "point" 1 cut: 
+    if point_cut:
+      df = df.loc[df.point != 1,:]  
+    #* Apply -100mm cut
+    #* --- just precautious, usualy everything is caught by cut before
+    if mm_cut:
+      df = df.loc[df.z < -100]
+    #* Remove all data +/- 100µm of median of each hexagon
+    if median_hex_cut:
+      df = remove_outliers(df, cut_threshold=0.1)#? ct in mm
+    return df
 
 def remove_outliers(df, mode='z', cut_threshold=100):
     """df as usual, cut_threshold in µm -> z also in µm!!!!
@@ -130,22 +142,9 @@ def remove_outliers(df, mode='z', cut_threshold=100):
         # print(f'upper_cut = {upper_cut}')
         def temp_sort_func(z):
             return  z if lower_cut < z < upper_cut else np.NaN
-        df['z_clean'] = df[mode].apply(lambda z: temp_sort_func(z))
+        df[mode] = df.loc[:,mode].apply(lambda z: temp_sort_func(z))
     return df 
 
-#! OUTDATED 
-# def hex_table(dataframe):
-#     """returns DF pivot table with mean, std and median of z by hexagon"""
-#     hex_table = pd.pivot_table(dataframe, values=['x','y','z'], index=['hex_nr'],
-#                             aggfunc={
-#                                 'x': np.mean,
-#                                 'y': np.mean,
-#                                 'z': [np.mean, measurement_error,]})
-#     hex_table[('x','mean')] = hex_table[('x','mean')].apply(lambda x: round(x,2))
-#     hex_table[('y','mean')] = hex_table[('y','mean')].apply(lambda x: round(x,2))
-#     hex_table.columns = ['_'.join(col).rstrip('_') for col in hex_table.columns.values]
-#     hex_table.rename(columns = {'x_mean':'x', 'y_mean':'y'}, inplace = True)
-#     return hex_table
 
 #========================================================
 #       Error Definition
@@ -247,6 +246,57 @@ def query_temps_from_db(db_path, starttime, endtime):
     temp_humid_db['datetime'].dt.tz_localize('Europe/Berlin')
     return temp_humid_db
 
+def query_exp_db(db_path='measurements.db'):
+    '''retrieve experiments descriptions from measurements.db'''
+    import sqlite3 as sql
+    import pandas as pd
+    with sql.connect(db_path) as conn: 
+        c = conn.cursor()
+        
+        #* Query SQL data
+        sql_query = f"""SELECT  *
+        from experiments """
+
+        c.execute(sql_query)
+        t = c.fetchall()
+        
+    #* Read into dataframes
+    exp_df = pd.DataFrame(t,
+                        columns=["exp_id",
+                                "exp_description",
+                                "exp_description_short"])
+    return exp_df
+
+
+def fetch_meas_metadata(exp_id=1, db_path='measurements.db'): 
+    '''retrieve experiments descriptions from measurements.db'''
+    import sqlite3 as sql
+    import pandas as pd
+    with sql.connect(db_path) as conn: 
+        c = conn.cursor()
+        
+        #* Query SQL data
+        sql_query = f"""SELECT  *
+        from measurement_meta WHERE exp_id == {exp_id} """
+
+        c.execute(sql_query)
+        meas_meta = c.fetchall()
+
+    #* Read into dataframe
+    meta_df = pd.DataFrame(meas_meta,
+                        columns=['measurement_id',
+                                'exp_id',
+                                'date',
+                                'file_name',
+                                'material', 
+                                'process_step', 
+                                'vac_mapping', 
+                                'coordinates',
+                                'meas_cap_status',
+                                'comments'
+                                ])
+    return meta_df
+
 
 def df_convert_unix_to_datetime(df: pd.DataFrame):
     """Takes dataframe with unix timestamp and replaces by python datetime object + converts to berlin timezone.
@@ -254,7 +304,7 @@ def df_convert_unix_to_datetime(df: pd.DataFrame):
        
     df['datetime'] = df['unix_time'].apply(lambda x: pd.to_datetime(x, unit='s', utc=True))
     df['datetime'] = df['datetime'].dt.tz_convert('Europe/Berlin')
-    df.drop('unix_time', axis=1)
+    # df.drop('unix_time', axis=1)
     return df
 
 def add_column_time_passed(df: pd.DataFrame):
@@ -387,7 +437,10 @@ def calc_flats_statistic_df(measurements_dict_pt: dict):
         mean_time = data.unix_time.mean()
         time.append(mean_time)
     flats_statistic_df = pd.DataFrame({'R': Rs, 'deltaR': deltaRs, 'RMS': RMSs, 'unix_time': time})
+    flats_statistic_df['run_nr'] = [int(run_nr.split('_')[2]) for run_nr in measurements_dict_pt.keys()]
+
     flats_statistic_df = df_convert_unix_to_datetime(flats_statistic_df)
+    flats_statistic_df['odd_runs'] = flats_statistic_df.run_nr.apply(lambda x: int(x)%2)
     return flats_statistic_df
 
 def calc_measurement_date_and_time(dataframe, timemode='unix_time', time_format='%H:%M - %d.%m.%Y'): 
