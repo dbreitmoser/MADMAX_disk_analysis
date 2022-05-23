@@ -104,7 +104,8 @@ def plot_table_hexagon_flatness(
     figsize=(12,12),
     triplet=False,
     fontsize_planarity=14, 
-    unit = 'µm'
+    unit = 'µm', 
+    fontsize_ticklabels=18,
     ):
     """gluetable datapoints with addtion of x and y shape projections. Choose hexgrid to include the map of the gluing machine"""
   
@@ -116,13 +117,13 @@ def plot_table_hexagon_flatness(
                           wspace=0.,
                           hspace=0.,
                           right=0.9,
-                          top=0.822, 
-                          )
+                          top=0.822,)
+    
     #* populate grid with axes objects
-    ax_trip = fig.add_subplot(gs[0, 1])
-    ax_xscatt = fig.add_subplot(gs[1, 1], sharex=ax_trip)
-    ax_yscatt = fig.add_subplot(gs[0, 0], sharey=ax_trip)
-    ax_text = fig.add_subplot(gs[1, 0],)
+    ax_trip = fig.add_subplot(gs[0, 1]) #? main plot in the center showing x-y scatter plot of z values in color
+    ax_xscatt = fig.add_subplot(gs[1, 1], sharex=ax_trip) #? x projection of main plot located to the bottom of the main plot
+    ax_yscatt = fig.add_subplot(gs[0, 0], sharey=ax_trip) #? y projections of main plot located to the left of the main plot
+    ax_text = fig.add_subplot(gs[1, 0],) #? plot for planarity annotation 
     #* text axis options
     anno_opts = dict(xy=(0.5, 0.5), xycoords='axes fraction',
                  va='center', ha='center', fontsize=fontsize_planarity)
@@ -133,7 +134,7 @@ def plot_table_hexagon_flatness(
     
     std = dataframe[mode].std()
     min_max = dataframe[mode].max() - dataframe[mode].min()
-    ax_text.annotate(f'Planarity\nRMS: {LatexFormat(std)} {unit}\nMin-Max: {LatexFormat(min_max)} {unit}', **anno_opts)
+    ax_text.annotate(f'RMS\n{LatexFormat(std)} {unit}\nMin-Max\n{LatexFormat(min_max)} {unit}', **anno_opts)
     
     #* plot table background picture
     plot_hexgrid(hexgrid_path, ax_trip)
@@ -144,6 +145,7 @@ def plot_table_hexagon_flatness(
     
     #* Plot points on table x-y representation
     cp = ax_trip.scatter(dataframe['x'], dataframe['y'], c=dataframe[mode], cmap=cmap, norm=colornorm, s=size, marker=marker)
+    ax_trip.tick_params(labelsize=fontsize_ticklabels)
     c_bar = fig.colorbar(cp, cax=cax1, pad=0.2) # Add a colorbar to a plot
     if title!=None:
         ax_trip.set_title(title)
@@ -152,17 +154,18 @@ def plot_table_hexagon_flatness(
         triplet_midpoint = [dataframe.x.mean(),dataframe.y.mean()]
         ax_trip.set_xlim(dataframe.x.min() -5, dataframe.x.max() + 5)
         ax_trip.set_ylim(dataframe.y.min()- 5, dataframe.y.max() + 5)
-    ax_trip.set_yticklabels([])
-    ax_trip.set_xticklabels([])
-    c_bar.ax.tick_params(labelsize=18)
+    # ax_trip.set_yticklabels([])
+    # ax_trip.set_xticklabels([])
+    c_bar.ax.tick_params(labelsize=fontsize_ticklabels)
     c_bar.ax.set_ylabel(f"height [{unit}]", fontsize=18)
     ax_trip.tick_params(axis="both",direction="in")
 
-    ax_xscatt.scatter(dataframe.x, dataframe[mode], s=3 )
-    ax_xscatt.tick_params(axis="x", left=True, right=True, labelleft=False, labelright=True)
+    ax_xscatt.scatter(dataframe.x, dataframe[mode], s=3)
+    ax_xscatt.tick_params(axis="x", left=True, right=True, labelleft=False, labelright=True, labelbottom=True)
     ax_xscatt.yaxis.set_label_position("right")
     ax_xscatt.yaxis.tick_right()
     ax_xscatt.grid(True)
+    
     ax_yscatt.scatter(dataframe[mode], dataframe.y, s=3)
     ax_yscatt.tick_params(axis="x", bottom=True, top=True, labelbottom=False, labeltop=True,labelrotation=30)
     ax_yscatt.xaxis.set_label_position("top")
@@ -247,7 +250,7 @@ def hist_label_data(variable):
 #========= Plot time series ==========
 #=====================================
 
-def plot_data_vs_time(data, mode="z", figsize=(9,4), n_labels=12, ylabel='z [µm]'):
+def plot_data_vs_time(data, mode="z", figsize=(9,4), n_labels=12, ylabel='z', unit='µm', title='title'):
     import matplotlib.dates as dates
     import pytz
     local_tz = pytz.timezone('Europe/Berlin')
@@ -255,11 +258,11 @@ def plot_data_vs_time(data, mode="z", figsize=(9,4), n_labels=12, ylabel='z [µm
     fig, ax = plt.subplots(figsize=figsize, ncols=1, nrows=1)
     sns.lineplot(x='datetime', y=mode, data=data, ci='sd')
     plt.grid(c="grey", ls="-", lw=1, alpha=0.3)
-
+    ax.set_title(title)
     formatter = dates.DateFormatter('%H:%M', tz=local_tz) 
     plt.gcf().axes[0].xaxis.set_major_formatter(formatter)
     plt.xlabel('time')
-    plt.ylabel(ylabel)
+    plt.ylabel(f'{ylabel} [{unit}]')
     return fig, ax
 
 
@@ -392,40 +395,42 @@ def ts_hist(
 #             bbox=dict(facecolor="none", edgecolor='none'))
 #     return fig, (ax0, ax1)
 
-def plot_triplet_dist_joyplot(all_triplet_data_dict,
+def plot_dist_joyplot(all_triplet_data_dict,
                               mode='z_mean',
                               title = "z-Distribution over time",
+                              timeaxis='time_h',
                               summary_statistics=False,
                               binwidth=6, 
-                              time_format = '%H:%M - %d.%m.%Y'): 
+                              figsize=(6,12),
+                              time_format = '%H:%M - %d.%m.%Y',
+                              ):
 
     from matplotlib import cm
-    n_hours = len(all_triplet_data_dict)
+    stat_result_df = tdu.calc_flats_statistic_df(dict_test)
+    plot_runs = stat_result_df.loc[stat_result_df.odd_runs==1]
+    n_hours = stat_result_df.odd_runs.value_counts()[1]
+    print(n_hours)
+    
     colors = cm.viridis_r(np.linspace(0, 1, n_hours))
-    fig, axes = plt.subplots(n_hours,1, figsize=(6,14))
+    fig, axes = plt.subplots(n_hours ,1, figsize=figsize)
     i = 0
     z_global_max = 0 
     z_global_min = 0
     for key, data in all_triplet_data_dict.items(): 
-        z_min = data.z_mean.min()
-        z_max = data.z_mean.max()
+        z_min = data[mode].min()
+        z_max = data[mode].max()
         if z_max > z_global_max: z_global_max = np.rint(z_max)
         if z_min < z_global_min: z_global_min = np.rint(z_min)
-    # print(z_global_max)
-    # print(z_global_min)
-    if z_global_max > 500: z_global_max = 100
-    if z_global_min < -500: z_global_min = -100
-    # print(z_global_max)
-    # print(z_global_min)
+
     
-    for (key, data), ax, color in zip(all_triplet_data_dict.items(), axes, colors): 
-        # data = data.loc[data.trip_color==triplet_color,:]
-        run_nr = int(data.run_nr.unique()[0])
-        z_min = data.z_mean.min()
-        z_max = data.z_mean.max()
+    for row, ax, color in zip(plot_runs.itertuples(), axes, colors): 
+        run_nr = row.run_nr
+        data = all_triplet_data_dict[f'run_nr_{run_nr}']
+        z_min = data[mode].min()
+        z_max = data[mode].max()
         R = z_max - z_min
         R = np.round(R,2) 
-        sig = np.round(data.z_mean.std(),2)
+        sig = np.round(data[mode].std(),2)
         
         nbins = np.arange(z_global_min, z_global_max ,binwidth)
         sns.histplot(data[mode], kde=False, ax=ax, element='step', color=color,
@@ -465,8 +470,8 @@ def plot_triplet_dist_joyplot(all_triplet_data_dict,
         if summary_statistics: 
             ax.text(z_global_max+2 ,
                     0.02,
-                    f'R:{R}, $\sigma$:{sig}',
-                    fontweight="bold",
+                    f'$\sigma$:{sig} µm\nmin-max:{R} µm',
+                    # fontweight="bold",
                     fontsize=14,
                     ha="left",
                     va='center')
@@ -476,7 +481,7 @@ def plot_triplet_dist_joyplot(all_triplet_data_dict,
 
 
 
-def plot_R_RMS_vs_time(result_df): 
+def plot_R_RMS_vs_time(result_df, R_range=70, RMS_range=10): 
     '''takes flatness result DataFrame from calc_flats_statistic_df function
        to display flatness statistics vs time'''
     #TODO: define Error for RMS and turn RMS plot into errorbarplot
@@ -492,11 +497,13 @@ def plot_R_RMS_vs_time(result_df):
                 fmt='.', capsize=5,)
     ax_R.xaxis.set_major_formatter(formatter)
     ax_R.set_title('R vs time')
-    ax_R.set_ylabel('R: Min - Max [µm]')
+    ax_R.set_ylabel('Min-Max [µm]')
     ax_R.grid(True)
     R_mean = result_df.R.mean()
+    R_ylim_lower = R_mean - np.floor(R_range/2)
+    R_ylim_upper = R_mean + np.floor(R_range/2)
+    ax_R.set_ylim(R_ylim_lower,R_ylim_upper)
     ax_R.fill_between(result_df.datetime, R_mean - 12, R_mean + 12, alpha=0.2, color='tab:orange')
-    ax_R.set_ylim(0,100)
 
     #* Plot RMS (std(z_mean)) vs time
     ax_RMS = axes[1]
@@ -507,17 +514,15 @@ def plot_R_RMS_vs_time(result_df):
     ax_RMS.grid(True)
     RMS_mean = result_df.RMS.mean()
     RMS_std = result_df.RMS.std()
-    RMS_ylim_lower = RMS_mean - 3*RMS_std
-    RMS_ylim_upper = RMS_mean + 3*RMS_std
-    # print(f'RMS_STD = {rms_std}')
-    # print(f'RMS_ylim_upper = {RMS_ylim_upper}')
+    RMS_ylim_lower = RMS_mean - np.floor(RMS_range/2)
+    RMS_ylim_upper = RMS_mean + np.floor(RMS_range/2)
     if RMS_ylim_lower < 0: RMS_ylim_lower = 0
-    ax_RMS.set_ylim(bottom=RMS_ylim_lower, top=RMS_ylim_upper)
+    ax_RMS.set_ylim(RMS_ylim_lower, RMS_ylim_upper)
     ax_RMS.axhline(RMS_mean, ls='--', c='black')
     plt.tight_layout()    
     return fig, axes
 
-def lw_repr(width, norm_width=300): return np.exp(width/norm_width) / 5
+def lw_repr(width, norm_width=300): return 10* (np.log(width/norm_width)+0.5)
 def plot_microscope_glue_canals(dataframe,
                                 mode='gap_relative',
                                 title='Steelplate gap data',
@@ -544,7 +549,7 @@ def plot_microscope_glue_canals(dataframe,
     for row in dataframe.itertuples():   #? Itterate over rows and be able to acces row attributes as usual
         xs = [row.x, row.adj_x1, row.adj_x2]
         ys = [row.y, row.adj_y1, row.adj_y2]
-        # def lw_repr(width, norm_width=300): return np.exp(width/norm_width) / 5
+
         ax.plot(xs, ys,
                 c=cp.to_rgba(dataframe.loc[dataframe.arm_label==row.arm_label,:].gap_relative), #* color from scatterplot
                 lw=f'{lw_repr(row.glue_width)}' #* linewidth represents width of glue trace on triplet
@@ -555,3 +560,9 @@ def plot_microscope_glue_canals(dataframe,
     ax.set_xlabel("x [mm]", fontsize=18)
     ax.set_ylabel("y [mm]", fontsize=18)
     return fig,ax
+
+def control_plots(df, z_col='z', hist_log=True, unit='µm',title='title'):
+    plot_data_vs_time(df, mode=z_col, unit=unit, title=title)
+    ts_hist(df, mode=z_col, unit=unit, title=title)
+    if hist_log:
+        plt.yscale('log')
