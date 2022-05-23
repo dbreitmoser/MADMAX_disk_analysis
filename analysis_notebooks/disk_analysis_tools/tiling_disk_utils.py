@@ -324,32 +324,20 @@ def quad_sum(s_1, s_2):
     s_2_sq = np.power(s_2,2)
     sums = np.add(s_1_sq, s_2_sq).astype(float)
     return np.sqrt(sums)
-#! Not used anymore
-# def difference_data(df_1, df_2): 
-#     '''Takes only pivot df from the point table or hex table function!'''    
-#     delta_df = df_1 - df_2
-#     delta_df['x', 'mean'] = df_1['x', 'mean'] 
-#     delta_df['y', 'mean'] = df_1['y', 'mean'] 
-#     delta_df['z', 'std'] = quad_sum(df_1['z', 'std'], df_2['z', 'std'])
-#     return delta_df
-#! Not usd anymore
-# def z_diff_raw_data(df_1, df_2): 
-#     '''Returns measurement dataframe with z_new = df_1.z - df_2.z'''
-#     delta_df = df_1 
-#     delta_df['z'] = df_1['z'] - df_2['z']
-#     return delta_df
-#! Depreached-------------------------------
-def combine_mean_measurements(data_signal, data_background, z_mean_col='z_mean', z_err_col='z_err'):
-    # Takes only point_tables
-    delta_df = data_signal.copy()
-    delta_df[z_mean_col] = data_signal[z_mean_col] - data_background[z_mean_col]
 
-    if 'unix_time' in data_signal.keys(): 
-    #     delta_df['datetime'] = data_signal['datetime']
-        delta_df['unix_time'] = data_signal['unix_time']
-    delta_df[z_err_col] = quad_sum(data_signal[z_err_col], data_background[z_err_col])
-    return delta_df 
-#!-----------------------------------------
+
+# #! Depreached-------------------------------
+# def combine_mean_measurements(data_signal, data_background, z_mean_col='z_mean', z_err_col='z_err'):
+#     # Takes only point_tables
+#     delta_df = data_signal.copy()
+#     delta_df[z_mean_col] = data_signal[z_mean_col] - data_background[z_mean_col]
+
+#     if 'unix_time' in data_signal.keys(): 
+#     #     delta_df['datetime'] = data_signal['datetime']
+#         delta_df['unix_time'] = data_signal['unix_time']
+#     delta_df[z_err_col] = quad_sum(data_signal[z_err_col], data_background[z_err_col])
+#     return delta_df 
+# #!-----------------------------------------
 # substitution for old combine_mean_measurements
 def subtract_mean_measurements(df_signal,
                                df_background,
@@ -386,7 +374,60 @@ def subtract_mean_measurements(df_signal,
                             axis=1)
     delta_df.drop(columns=['hex_point'], inplace=True)
     return delta_df
+#*---------------Data pipeline-------------
+def preprocess_data(data_raw, precut_check=True, log_precut=True, postcut_check=True, log_postcut=False,
+                    point_cut=True, mm_cut=True, median_hex_cut=True, title='title' ):
 
+        
+        if precut_check: 
+                print('control plots precut')
+                tdp.control_plots(data_raw, z_col='z', hist_log=log_precut,title=title, unit='mm')
+                
+    #* apply cuts background (=filter bg data)
+        filter_df = filter_data(data_raw,
+                    point_cut=point_cut,
+                    mm_cut=mm_cut, 
+                    median_hex_cut=median_hex_cut,)
+        
+        if postcut_check: 
+                print('control plots post')
+                tdp.control_plots(filter_df, z_col='z', hist_log=log_postcut,title=title, unit='mm')
+        removed_points = data_raw.z.count() - filter_df.z.count()
+        print(f'Total points removed: {removed_points}')
+        print(f'Total points removed: {removed_points/ data_raw.z.count():.2f}%')
+        
+        filter_pt = point_table(filter_df)
+        filter_pt.z_mean = subtract_mean(filter_pt.z_mean)
+        filter_pt.z_mean = convert_mm_to_microns(filter_pt.z_mean)
+        filter_pt = df_convert_unix_to_datetime(filter_pt)
+        return filter_pt, filter_df
+    
+def data_process_pipeline(signal_raw_df, background_raw_df): 
+    print('Background Data:')
+    background_pt,_ = preprocess_data(background_raw_df,
+                    precut_check=False,
+                    postcut_check=False,
+                    point_cut=True, mm_cut=True, median_hex_cut=True,)
+    print('Signal Data:')
+    singal_pt,_ = preprocess_data(signal_raw_df,
+                precut_check=False,
+                postcut_check=False,
+                point_cut=True, mm_cut=True, median_hex_cut=True,)
+    diff_pt = subtract_mean_measurements(singal_pt, background_pt)
+    diff_pt.z_err = convert_mm_to_microns(diff_pt.z_err)
+    diff_pt = add_triplet_color_label(diff_pt)
+    diff_pt = add_ring_nr_label(diff_pt)
+    return diff_pt
+
+def process_curing_data(full_signal_raw_df, background_raw_df):
+    measurements_dict_pt = {}
+    for run in full_signal_raw_df.run_nr.unique(): 
+        data_single_run = full_signal_raw_df.loc[full_signal_raw_df.run_nr == run, :]
+        data_single_run_pt = data_process_pipeline(data_single_run, background_raw_df)
+        data_single_run_pt['run_nr'] = run
+        measurements_dict_pt[f'run_nr_{run}'] = data_single_run_pt
+    return measurements_dict_pt
+#*-----------------------------------------
 def subtract_mean(data):
     mean_data = np.mean(data)
     data = data.apply(lambda z: (z - mean_data))
@@ -440,6 +481,7 @@ def calc_flats_statistic_df(measurements_dict_pt: dict):
     flats_statistic_df['run_nr'] = [int(run_nr.split('_')[2]) for run_nr in measurements_dict_pt.keys()]
 
     flats_statistic_df = df_convert_unix_to_datetime(flats_statistic_df)
+    flats_statistic_df = add_column_time_passed(flats_statistic_df)
     flats_statistic_df['odd_runs'] = flats_statistic_df.run_nr.apply(lambda x: int(x)%2)
     return flats_statistic_df
 
