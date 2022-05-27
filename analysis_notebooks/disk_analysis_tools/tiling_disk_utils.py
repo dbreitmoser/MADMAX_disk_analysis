@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np 
 import pytz
 local_tz = pytz.timezone('Europe/Berlin')
-
+from disk_analysis_tools import tiling_disk_plots as tdp
 
 #========================================================
 #       Reading in Data
@@ -358,6 +358,7 @@ def subtract_mean_measurements(df_signal,
     if not ('hex_point' in df_background.keys()):
         df_background['hex_point'] = df_background.apply(lambda row: str(int(row.hex_nr))+'_'+str(int(row.point)), axis=1)
     # delta_df = df_signal.copy()
+    #* merge: combine dataframes from left to right
     delta_df = pd.merge(df_signal,
                         df_background[[z_mean_col, z_err_col, 'hex_point']],
                         on='hex_point',
@@ -374,16 +375,19 @@ def subtract_mean_measurements(df_signal,
                             axis=1)
     delta_df.drop(columns=['hex_point'], inplace=True)
     return delta_df
+
 #*---------------Data pipeline-------------
 def preprocess_data(data_raw, precut_check=True, log_precut=True, postcut_check=True, log_postcut=False,
-                    point_cut=True, mm_cut=True, median_hex_cut=True, title='title' ):
-
-        
+                    point_cut=True, mm_cut=True, median_hex_cut=True, title='title',print_removed_points=False ):
+        """filters raw data & shows cotrol plots to see the distributions of points & timeseries of before
+        filtering and after filtering
+        returns: filter_pt: pivot table of filtered data 
+        filter_df: filtered data"""
         if precut_check: 
                 print('control plots precut')
                 tdp.control_plots(data_raw, z_col='z', hist_log=log_precut,title=title, unit='mm')
                 
-    #* apply cuts background (=filter bg data)
+    #* apply filter to dataframe
         filter_df = filter_data(data_raw,
                     point_cut=point_cut,
                     mm_cut=mm_cut, 
@@ -392,41 +396,99 @@ def preprocess_data(data_raw, precut_check=True, log_precut=True, postcut_check=
         if postcut_check: 
                 print('control plots post')
                 tdp.control_plots(filter_df, z_col='z', hist_log=log_postcut,title=title, unit='mm')
+        # * print number of removed points
         removed_points = data_raw.z.count() - filter_df.z.count()
-        print(f'Total points removed: {removed_points}')
-        print(f'Total points removed: {removed_points/ data_raw.z.count():.2f}%')
-        
+        if print_removed_points:
+            print(f'Total points removed: {removed_points}')
+            print(f'Total points removed: {removed_points/ data_raw.z.count():.2f}%')
+        #* create pivot table
         filter_pt = point_table(filter_df)
+        #* process pivot table further: subtract baseline & convert all units to µm
         filter_pt.z_mean = subtract_mean(filter_pt.z_mean)
         filter_pt.z_mean = convert_mm_to_microns(filter_pt.z_mean)
+        filter_pt.z_err = convert_mm_to_microns(filter_pt.z_err)
         filter_pt = df_convert_unix_to_datetime(filter_pt)
         return filter_pt, filter_df
     
-def data_process_pipeline(signal_raw_df, background_raw_df): 
-    print('Background Data:')
+def data_process_pipeline(signal_raw_df, background_raw_df, print_removed_points): 
+    """ function to preprocess raw signal & raw background data and to subtract them from one another
+    returns: diff_pt: total dataframe of subtracted singal - background pivot tables """
+    if print_removed_points: print('Background Data:')
     background_pt,_ = preprocess_data(background_raw_df,
                     precut_check=False,
                     postcut_check=False,
-                    point_cut=True, mm_cut=True, median_hex_cut=True,)
-    print('Signal Data:')
+                    point_cut=True, mm_cut=True, median_hex_cut=True,
+                    print_removed_points=print_removed_points)
+    if print_removed_points: print('Signal Data:')
     singal_pt,_ = preprocess_data(signal_raw_df,
                 precut_check=False,
                 postcut_check=False,
-                point_cut=True, mm_cut=True, median_hex_cut=True,)
+                point_cut=True, mm_cut=True, median_hex_cut=True,
+                print_removed_points=print_removed_points)
     diff_pt = subtract_mean_measurements(singal_pt, background_pt)
-    diff_pt.z_err = convert_mm_to_microns(diff_pt.z_err)
     diff_pt = add_triplet_color_label(diff_pt)
     diff_pt = add_ring_nr_label(diff_pt)
     return diff_pt
 
-def process_curing_data(full_signal_raw_df, background_raw_df):
+def process_curing_data(full_signal_raw_df, background_raw_df, print_removed_points=False):
+    """function for applying the data_process_pipeline to a 'full_singal_raw_df' -> a dataframe which has all runs 
+    concatinated in one single dataframe. It splits the full_signal_raw_df by run_nr and applies the data_process pipeline
+    retuns: measurements_dict_pt -> dictonary of all subtracted data. key: run_nr_x; value: difference_pt"""
     measurements_dict_pt = {}
     for run in full_signal_raw_df.run_nr.unique(): 
         data_single_run = full_signal_raw_df.loc[full_signal_raw_df.run_nr == run, :]
-        data_single_run_pt = data_process_pipeline(data_single_run, background_raw_df)
+        data_single_run_pt = data_process_pipeline(data_single_run, background_raw_df,
+                                                    print_removed_points=print_removed_points)
         data_single_run_pt['run_nr'] = run
         measurements_dict_pt[f'run_nr_{run}'] = data_single_run_pt
     return measurements_dict_pt
+
+
+def size_check_meas_dict_pt(meas_dict_pt): 
+    """checks if runs are complete, removes run if points are missing"""
+    return_meas_dict = {}
+    run_size = meas_dict_pt['run_nr_1'].size
+    for key in meas_dict_pt.keys():
+        if meas_dict_pt[key].size == run_size:
+            return_meas_dict[key] = meas_dict_pt[key]
+    del meas_dict_pt
+    return return_meas_dict
+
+
+def laser_data_analysis(meas_id_sig, meas_id_bg,
+                        meta_data:pd.DataFrame,
+                        folder='triplets',
+                        bg_data_check=False, 
+                        sig_data_check=False,
+                        print_removed_points=False,): 
+    """function to read data by measurement_id and analyse selected data"""
+    from pathlib import Path
+    measurement_folder  = Path.cwd().parent / 'measurements' / folder
+    #* read bg data
+    bfg_filename = meta_data.loc[meta_data.measurement_id==meas_id_bg].file_name.values[0]
+    print(bfg_filename)
+    bfg_df = read_single_measurement(measurement_folder, bfg_filename)
+    if bg_data_check:
+        _,_= preprocess_data(bfg_df,
+                    precut_check=True,
+                    postcut_check=True,
+                    point_cut=True, mm_cut=True, median_hex_cut=True, title=bfg_filename)
+        
+    #* read singal data
+    signal_filename = meta_data.loc[meta_data.measurement_id==meas_id_sig].file_name.values[0]
+    print(signal_filename)
+    signal_df = read_single_measurement(measurement_folder, signal_filename)
+    if sig_data_check:
+        _,_ = preprocess_data(signal_df,
+                precut_check=True,
+                postcut_check=True,
+                point_cut=True, mm_cut=True, median_hex_cut=True, title=signal_filename)
+    #* process both datasets
+    meas_dict_pt = process_curing_data(signal_df, bfg_df, print_removed_points=print_removed_points)
+    meas_dict_pt = size_check_meas_dict_pt(meas_dict_pt)
+    return meas_dict_pt
+
+
 #*-----------------------------------------
 def subtract_mean(data):
     mean_data = np.mean(data)
