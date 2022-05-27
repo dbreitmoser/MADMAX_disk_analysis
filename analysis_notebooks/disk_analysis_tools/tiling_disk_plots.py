@@ -1,6 +1,6 @@
 import disk_analysis_tools.tiling_disk_utils as tdu
 import numpy as np 
-
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -105,7 +105,8 @@ def plot_table_hexagon_flatness(
     triplet=False,
     fontsize_planarity=14, 
     unit = 'µm', 
-    fontsize_ticklabels=18,
+    fontsize_ticklabels=16,
+    fontsize_title=18,
     ):
     """gluetable datapoints with addtion of x and y shape projections. Choose hexgrid to include the map of the gluing machine"""
   
@@ -147,8 +148,9 @@ def plot_table_hexagon_flatness(
     cp = ax_trip.scatter(dataframe['x'], dataframe['y'], c=dataframe[mode], cmap=cmap, norm=colornorm, s=size, marker=marker)
     ax_trip.tick_params(labelsize=fontsize_ticklabels)
     c_bar = fig.colorbar(cp, cax=cax1, pad=0.2) # Add a colorbar to a plot
+    ax_trip.tick_params(which='both', labelbottom=False, labelleft=False)
     if title!=None:
-        ax_trip.set_title(title)
+        ax_trip.set_title(title, pad=15, fontweight='bold')
     #* Confine plot to visible triplet
     if triplet == True:
         triplet_midpoint = [dataframe.x.mean(),dataframe.y.mean()]
@@ -157,7 +159,7 @@ def plot_table_hexagon_flatness(
     # ax_trip.set_yticklabels([])
     # ax_trip.set_xticklabels([])
     c_bar.ax.tick_params(labelsize=fontsize_ticklabels)
-    c_bar.ax.set_ylabel(f"height [{unit}]", fontsize=18)
+    c_bar.ax.set_ylabel(f"height [{unit}]", fontsize=fontsize_title)
     ax_trip.tick_params(axis="both",direction="in")
 
     ax_xscatt.scatter(dataframe.x, dataframe[mode], s=3)
@@ -209,10 +211,6 @@ def fit_surface_plot(ax,x,y,z,cbar_scale=(-50, 0, 50), show_data=False, data=Non
 
     #return fig, ax 
 
-# def hist_error_band(ax, mean, std, label_std=None, label_mean=None, c_mean=None, c_std=None): 
-#     ax.axvspan(mean-std, mean+std, color=c_std, alpha=0.3, label=label_std)
-#     ax.axvline(mean, ls='--',c=c_mean, linewidth=2, label=label_mean)
-#     return ax
 
 #* UNDER CONSTRUCTION
 
@@ -228,18 +226,19 @@ def LatexFormat(f, scirange=[0.01,1000]):
     return float_str
 
 def hist_label_data(variable):
+    # Stolen from Jack Rolph MVP
     import scipy.stats as stats
     from scipy.stats import median_abs_deviation as mad  
     hist_data = {
         "N": len(variable),
         "$\\bar{z}$": np.mean(variable),
         "RMS": np.std(variable),
+        "max-min($z$)": np.max(variable) - np.min(variable),
         # "$\\sigma_{z}$ / $\\sqrt{N}$": np.std(variable) / np.sqrt(len(variable)),
         # "$s_{z}$": stats.skew(variable),
         # "$k_{z}$": stats.kurtosis(variable),
         # "median($z$)":np.median(variable),
         # "MAD($z$)":mad(variable),
-        "max-min($z$)": np.max(variable) - np.min(variable),
     }
     
     label = '\n'.join(f'{key} : {LatexFormat(val)}' for key, val in hist_data.items())
@@ -266,48 +265,7 @@ def plot_data_vs_time(data, mode="z", figsize=(9,4), n_labels=12, ylabel='z', un
     return fig, ax
 
 
-# def ts_hist(
-#     data,
-#     mode='z',
-#     figsize=(7,6),
-#     color_plot='tab:blue', 
-#     color_gauss='tab:blue',  
-#     fit=False,
-#     fit_window=(-100,100),
-#     show_datapoints=True,
-#     fit_start_param = [ 10, 0, 10],
-#     x_label = 'z [µm]', 
-#     plot_bins='auto'
-#             ): 
-#     bins = np.array(range(fit_window[0],fit_window[1], 6)) - 0.5
-#     fig, ax = plt.subplots(figsize=figsize, nrows=1, ncols=1)
-#     _, label = hist_label_data(data[mode])
-#     sns.histplot(data[mode], kde=False, ax=ax, element='step', color=color_plot,
-#                  stat='probability', label=label, fill=True, alpha=0.4, 
-#                  bins=plot_bins,)
-    
-#     counts,bin_edges = np.histogram(data[mode],bins)
-#     counts = counts/counts.sum()
-#     bin_centres = (bin_edges[:-1] + bin_edges[1:])/2.
-#     if show_datapoints:
-#         ax.scatter(bin_centres, counts, s=4**2, c='black')
-#     if fit:
-#         from scipy.optimize import curve_fit
-#         def fit_function(x, B, mu, sigma):
-#             return ( B * np.exp(-1.0 * (x - mu)**2 / (2 * sigma**2)))
-#         popt, pcov = curve_fit(fit_function, xdata=bin_centres, ydata=counts, p0=fit_start_param)
-#         xspace = np.linspace(fit_window[0], fit_window[1], 100000)
-#         plt.plot(xspace, fit_function(xspace, *popt),
-#             color='tab:orange',
-#             ls='--',
-#             linewidth=2.5,
-#             label=f'$\mu$: {LatexFormat(popt[1])} \n $\sigma$: {LatexFormat(popt[2])}')
 
-
-#     ax.set_xlabel(x_label)
-#     plt.legend(bbox_to_anchor=(1, 1), loc='best', borderaxespad=0.4,  fontsize=14)
-#     plt.grid(c="grey", ls="-", lw=1, alpha=0.3)
-#     return fig, ax
 
 def ts_hist(
     data,
@@ -337,65 +295,8 @@ def ts_hist(
         ax.set_title(title)
     return fig, ax
 
-#? no fits needed anymore ¯\_(ツ)_/¯
-# def ts_fit_hist(dataframe,
-#         mode='z',
-#         bin_plot_range=[-100,100],
-#         fit_start_param = [0,40],
-#         x_label = 'z [µm]', 
-#         fig_title = 'Hist-Fit to data',
-#         figsize=(8,8),
-#         bin_size = 6, #? µm <- resolution of laser):
-
-#         ): 
-#     from iminuit import Minuit
-#     from probfit import UnbinnedLH, gaussian, Extended, mid, BinnedLH
-#     from matplotlib import gridspec
-    
-#     data = dataframe[mode].to_numpy()[~(np.isnan(dataframe[mode]))]
-#     egauss = Extended(gaussian)
-#     # cost functuion
-#     unbinned_likelihood = UnbinnedLH(egauss, data, extended=True)
-#     # define minimizer function
-#     minuit = Minuit(unbinned_likelihood, mean=fit_start_param[0], sigma=fit_start_param[1], N=1000)
-#     # minimize function
-#     minuit.migrad()
-#     # get data from "draw"-function to plot it myself
-#     ((data_edges, datay), (errorp, errorm), (total_pdf_x, total_pdf_y), parts) = unbinned_likelihood.draw(minuit, parts=True)
-#     plt.clf()
-#     # plot fit and data
-#     fig = plt.figure(figsize=figsize)
-#     gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1], wspace=0.0, hspace=0.0 )
-#     ax0 = plt.subplot(gs[0])    # Data points & histogram & fit
-#     ax0.tick_params(axis="both", direction="in")
-#     nbins = np.arange(bin_plot_range[0],bin_plot_range[1], bin_size)
-
-#     ax0.errorbar(mid(data_edges), datay, errorp, fmt='.', capsize=0, color='black', label='Data')
-#     ax0.plot(total_pdf_x, total_pdf_y, color='tab:orange', ls='--', lw=2, label='Unbinned Likelihood')
-#     _, label = hist_label_data(dataframe[mode])
-#     print(label)
-#     sns.histplot(dataframe[mode], kde=False, ax=ax0, element='step', color='tab:blue',
-#                     stat='count', label=label, fill=True, alpha=0.4, 
-#                     bins=nbins,)
-#     ax0.legend(bbox_to_anchor=(1, 1), loc='best', borderaxespad=0.4,  fontsize=14)
-#     # Residual plot
-#     plt.title(fig_title)
-#     ax0.grid(c="grey", ls="-", lw=1, alpha=0.3)
-#     ax1 = plt.subplot(gs[1], sharex=ax0)
-#     unbinned_likelihood.draw_residual(minuit,ax=ax1)
-#     # Prettify the plot
-#     plt.grid(c="grey", ls="-", lw=1, alpha=0.3)
-#     ax1.tick_params(axis="both", direction="in")
-#     plt.xlabel(x_label)
-#     # show fit parameters
-#     boxtext = f"""$\mu$: {LatexFormat(minuit.values[0])}$\pm$  {LatexFormat(minuit.errors[0])}
-#     \n$\sigma$: {LatexFormat(minuit.values[1])} $\pm$ {LatexFormat(minuit.errors[1])} """
-#     ax0.text(0.15, 0.82, boxtext, transform=fig.transFigure,
-#             fontsize=14, verticalalignment="top", 
-#             bbox=dict(facecolor="none", edgecolor='none'))
-#     return fig, (ax0, ax1)
-
 def plot_dist_joyplot(all_triplet_data_dict,
+                              triplet_color = 'all',
                               mode='z_mean',
                               title = "z-Distribution over time",
                               timeaxis='time_h',
@@ -406,10 +307,9 @@ def plot_dist_joyplot(all_triplet_data_dict,
                               ):
 
     from matplotlib import cm
-    stat_result_df = tdu.calc_flats_statistic_df(dict_test)
+    stat_result_df = tdu.calc_flats_statistic_df(all_triplet_data_dict)
     plot_runs = stat_result_df.loc[stat_result_df.odd_runs==1]
     n_hours = stat_result_df.odd_runs.value_counts()[1]
-    print(n_hours)
     
     colors = cm.viridis_r(np.linspace(0, 1, n_hours))
     fig, axes = plt.subplots(n_hours ,1, figsize=figsize)
@@ -425,7 +325,11 @@ def plot_dist_joyplot(all_triplet_data_dict,
     
     for row, ax, color in zip(plot_runs.itertuples(), axes, colors): 
         run_nr = row.run_nr
-        data = all_triplet_data_dict[f'run_nr_{run_nr}']
+        if triplet_color=='all':
+            data = all_triplet_data_dict[f'run_nr_{run_nr}']
+        else:
+            data = all_triplet_data_dict[f'run_nr_{run_nr}']
+            data = data.loc[data.trip_color==triplet_color,:]
         z_min = data[mode].min()
         z_max = data[mode].max()
         R = z_max - z_min
@@ -459,10 +363,15 @@ def plot_dist_joyplot(all_triplet_data_dict,
         spines = ["top","right","left","bottom"]
         for s in spines:
             ax.spines[s].set_visible(False)
-        time_str = tdu.calc_measurement_date_and_time(data, time_format=time_format)
-        ax.text(z_global_min -2 ,
+        if timeaxis == 'datetime':
+            time_str = tdu.calc_measurement_date_and_time(data, time_format=time_format)
+            fig.text(0.06,0.867,f"Time",fontsize=14, fontweight="bold",)
+        else:
+            time_str = row.time_h
+            fig.text(0.06,0.867,f"Time passed [h]",fontsize=14)
+        ax.text(z_global_min - 2 ,
                 0.02,
-                f'{time_str}',
+                f'{time_str:.2f}',
                 fontweight="bold",
                 fontsize=14,
                 ha="right",
@@ -475,50 +384,60 @@ def plot_dist_joyplot(all_triplet_data_dict,
                     fontsize=14,
                     ha="left",
                     va='center')
-    fig.text(0.06,0.867,f"Time",fontsize=14, fontweight="bold",)
     fig.text(0.06,0.89, title ,fontsize=18, fontweight="bold",)
     return fig, axes
 
 
 
-def plot_R_RMS_vs_time(result_df, R_range=70, RMS_range=10): 
+def plot_R_RMS_vs_time(meas_dict_pt, timeaxis='time_h', R_range=70, RMS_range=10,): 
     '''takes flatness result DataFrame from calc_flats_statistic_df function
        to display flatness statistics vs time'''
-    #TODO: define Error for RMS and turn RMS plot into errorbarplot
+       
+    result_df = tdu.calc_flats_statistic_df(meas_dict_pt)
     import matplotlib.dates as dates
     import pytz
     local_tz = pytz.timezone('Europe/Berlin')
     fig, axes = plt.subplots(2,1, figsize=(7,7))
-    formatter = dates.DateFormatter('%H:%M', tz=local_tz)
-
     #* Plot min-max (R) vs time
     ax_R = axes[0]
-    ax_R.errorbar(x=result_df.datetime, y=result_df.R, yerr=result_df.deltaR,
+    ax_R.errorbar(x=result_df[timeaxis], y=result_df.R, yerr=result_df.deltaR,
                 fmt='.', capsize=5,)
-    ax_R.xaxis.set_major_formatter(formatter)
-    ax_R.set_title('R vs time')
+    if timeaxis=='datetime':
+      formatter = dates.DateFormatter('%H:%M', tz=local_tz)
+      ax_R.xaxis.set_major_formatter(formatter)
+    else: ax_R.set_xlabel('time [hours passed]')
     ax_R.set_ylabel('Min-Max [µm]')
     ax_R.grid(True)
     R_mean = result_df.R.mean()
     R_ylim_lower = R_mean - np.floor(R_range/2)
     R_ylim_upper = R_mean + np.floor(R_range/2)
     ax_R.set_ylim(R_ylim_lower,R_ylim_upper)
-    ax_R.fill_between(result_df.datetime, R_mean - 12, R_mean + 12, alpha=0.2, color='tab:orange')
-
+   #  print(R_mean)
+   #  print(R_ylim_lower)
+   #  print(R_ylim_upper)
+    ax_R.fill_between(result_df[timeaxis], R_mean - 12, R_mean + 12, alpha=0.2, color='tab:orange')
+    ax_R.set_title('Min-Max vs time')
+  
     #* Plot RMS (std(z_mean)) vs time
     ax_RMS = axes[1]
-    ax_RMS.scatter(x=result_df.datetime, y=result_df.RMS, marker='x')
-    ax_RMS.xaxis.set_major_formatter(formatter)
+    ax_RMS.scatter(x=result_df[timeaxis], y=result_df.RMS, marker='x')
+    if timeaxis=='datetime':
+      ax_RMS.xaxis.set_major_formatter(formatter)
+      ax_RMS.set_xlabel('datetime')
+    else: ax_RMS.set_xlabel('time [hours passed]')
+    
     ax_RMS.set_title('RMS vs time')
     ax_RMS.set_ylabel('RMS [µm]')
     ax_RMS.grid(True)
     RMS_mean = result_df.RMS.mean()
-    RMS_std = result_df.RMS.std()
     RMS_ylim_lower = RMS_mean - np.floor(RMS_range/2)
     RMS_ylim_upper = RMS_mean + np.floor(RMS_range/2)
+   #  print(f'RMS_lower = {RMS_ylim_lower}')
+   #  print(f'RMS_ylim_upper = {RMS_ylim_upper}')
     if RMS_ylim_lower < 0: RMS_ylim_lower = 0
     ax_RMS.set_ylim(RMS_ylim_lower, RMS_ylim_upper)
     ax_RMS.axhline(RMS_mean, ls='--', c='black')
+    
     plt.tight_layout()    
     return fig, axes
 
@@ -566,3 +485,110 @@ def control_plots(df, z_col='z', hist_log=True, unit='µm',title='title'):
     ts_hist(df, mode=z_col, unit=unit, title=title)
     if hist_log:
         plt.yscale('log')
+
+def vac_mapping_helper(vac_str):
+    import re
+    pattern = re.compile(r'\w*[0-9]+')
+    matches = pattern.findall(vac_str)
+
+    if matches[-1] == '1000':
+        return 'vac off'
+    if matches[-1] == '60':
+        return 'vac on'
+    else:
+        return 'vac {matches[1]} mbar'
+    
+def title_str_from_metadata(meta_data,meas_id_sig,meas_id_bg,):
+    def one_data_title_str_helper(meta_data,meas_id):
+        meas_id_info = meta_data.loc[meta_data.measurement_id==meas_id]
+        if meas_id_info.material.values[0] == 'table':
+            return 'table'
+        process_step = meas_id_info.process_step.values[0]
+        vac =  meas_id_info.vac_mapping.values[0]
+        vac = vac_mapping_helper(vac)
+        return f'({process_step}, {vac})'
+    sig_string = one_data_title_str_helper(meta_data,meas_id_sig)
+    bg_string = one_data_title_str_helper(meta_data,meas_id_bg)
+    print(sig_string)
+    title_string = '$z_{signal}$ - $z_{ref}$\n'+f'{sig_string} - {bg_string}'
+    return title_string
+
+def plot_analysis_results(exp_id:int,
+                          meas_dict_pt:dict,
+                          exp_db:pd.DataFrame,
+                          meta_data:pd.DataFrame,
+                          meas_id_sig:int=1,
+                          meas_id_bg:int=1,
+                          joyplot=True,
+                          joyplot_summary_stats=False,
+                          R_vs_t=True,
+                          hexagon_flatness=True,
+                          plot_runs=None, # otherwise list of runs to plot
+                          triplet=True): 
+    #*=============== hexagon flatness plot ===================
+    if plot_runs==None:
+        plot_runs=np.arange(1,len(meas_dict_pt.keys())+1,1)
+    if triplet:
+        example_run = meas_dict_pt['run_nr_1']
+        colors = example_run.trip_color.unique()
+    if hexagon_flatness:
+        title_string = title_str_from_metadata(meta_data, meas_id_sig, meas_id_bg)
+        stats_df = tdu.calc_flats_statistic_df(meas_dict_pt)
+        for row in stats_df.itertuples(): 
+            run_nr = row.run_nr
+            if run_nr in plot_runs:
+                if triplet:
+                    for col in colors:
+                        data = meas_dict_pt[f'run_nr_{run_nr}']
+                        plot_df = data[data.trip_color==col]
+                        fig, ax = plot_table_hexagon_flatness(plot_df,
+                                                                    mode=('z_mean'),
+                                                                    size=5**2,
+                                                                    cbar_norm=(-50, 0, 50),
+                                                                    triplet=triplet,
+                                                                    title=title_string,
+                                                                    figsize=(7,7),
+                                                                    fontsize_ticklabels=14, 
+                                                                    fontsize_title=14)
+                        exp_description_str_short = exp_db.loc[exp_db.exp_id == exp_id].exp_description_short.values[0]
+                        fig.text(0.05,0.901, f'{exp_description_str_short}\nhour {row.time_h:.2f}\n{col} triplet' ,fontsize=14,)
+                else:
+                    data = meas_dict_pt[f'run_nr_{run_nr}']
+                    fig, ax = plot_table_hexagon_flatness(data,
+                                                                mode=('z_mean'),
+                                                                size=5**2,
+                                                                cbar_norm=(-50, 0, 50),
+                                                                triplet=triplet,
+                                                                title=title_string)
+                    exp_description_str_short = exp_db.loc[exp_db.exp_id == exp_id].exp_description_short.values[0]
+                    fig.text(0.05,0.865, f'{exp_description_str_short}\nhour {row.time_h:.2f}' ,fontsize=16,)
+       #*=============== R vs t plot ===================
+    if R_vs_t:
+        plot_R_RMS_vs_time(meas_dict_pt)
+       #*=============== joyplot ===================
+    if joyplot:
+        if triplet:
+            for col in colors:
+                fig_joy, ax_joy = plot_dist_joyplot(meas_dict_pt,
+                                                    triplet_color=col,
+                                                    timeaxis='time_h,',
+                                                    time_format='%H:%M',
+                                                    figsize=(5,10),
+                                                    summary_statistics=joyplot_summary_stats)
+                fig_joy.text(0.78,0.901, f'{col} triplet' ,fontsize=16,)
+        else:
+            plot_dist_joyplot(meas_dict_pt,
+                              triplet_color='all',
+                                timeaxis='time_h,',
+                                time_format='%H:%M',
+                                figsize=(5,10),
+                                summary_statistics=joyplot_summary_stats)
+            
+def plot_z_table_hist(meas_pt_df, meta_data, meas_id_sig=1, meas_id_bg=1, mode='z_mean'): 
+    plot_bins = np.arange(meas_pt_df[mode].min(), meas_pt_df[mode].max(),6)
+    title = title_str_from_metadata(meta_data,
+                                meas_id_sig, #* measurement id signal
+                                meas_id_bg, #* measurement id backgroundmeas_id_sig,meas_id_bg
+                                )
+    fig, ax = ts_hist(meas_pt_df, mode=mode, plot_bins=plot_bins, title=title)
+    return fig, ax
