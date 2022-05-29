@@ -542,14 +542,14 @@ def plot_analysis_results(exp_id:int,
                         data = meas_dict_pt[f'run_nr_{run_nr}']
                         plot_df = data[data.trip_color==col]
                         fig, ax = plot_table_hexagon_flatness(plot_df,
-                                                                    mode=('z_mean'),
-                                                                    size=5**2,
-                                                                    cbar_norm=(-50, 0, 50),
-                                                                    triplet=triplet,
-                                                                    title=title_string,
-                                                                    figsize=(7,7),
-                                                                    fontsize_ticklabels=14, 
-                                                                    fontsize_title=14)
+                                                            mode=('z_mean'),
+                                                            size=5**2,
+                                                            cbar_norm=(-50, 0, 50),
+                                                            triplet=triplet,
+                                                            title=title_string,
+                                                            figsize=(7,7),
+                                                            fontsize_ticklabels=14, 
+                                                            fontsize_title=14)
                         exp_description_str_short = exp_db.loc[exp_db.exp_id == exp_id].exp_description_short.values[0]
                         fig.text(0.05,0.901, f'{exp_description_str_short}\nhour {row.time_h:.2f}\n{col} triplet' ,fontsize=14,)
                 else:

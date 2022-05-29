@@ -377,6 +377,15 @@ def subtract_mean_measurements(df_signal,
     return delta_df
 
 #*---------------Data pipeline-------------
+def read_data_from_meas_id(folder, meas_id, meta_data):
+    from pathlib import Path
+    measurement_folder  = Path.cwd().parent / 'measurements' / folder
+    #* read data
+    filename = meta_data.loc[meta_data.measurement_id==meas_id].file_name.values[0]
+    print(filename)
+    df = read_single_measurement(measurement_folder, filename)
+    return df, filename
+
 def preprocess_data(data_raw, precut_check=True, log_precut=True, postcut_check=True, log_postcut=False,
                     point_cut=True, mm_cut=True, median_hex_cut=True, title='title',print_removed_points=False ):
         """filters raw data & shows cotrol plots to see the distributions of points & timeseries of before
@@ -410,39 +419,61 @@ def preprocess_data(data_raw, precut_check=True, log_precut=True, postcut_check=
         filter_pt = df_convert_unix_to_datetime(filter_pt)
         return filter_pt, filter_df
     
-def data_process_pipeline(signal_raw_df, background_raw_df, print_removed_points): 
+def data_process_pipeline(signal_raw_df, background_raw_df, print_removed_points=False ,**kwargs):
     """ function to preprocess raw signal & raw background data and to subtract them from one another
     returns: diff_pt: total dataframe of subtracted singal - background pivot tables """
+    if 'bg_filter_cuts' not in kwargs.keys():
+        bg_filter_cuts={'mm_cut':True, 'median_hex_cut':True, 'point_cut':True}
+    else: bg_filter_cuts = kwargs['bg_filter_cuts']
+    
+    if 'sig_filter_cuts' not in kwargs.keys():
+        sig_filter_cuts={'mm_cut':True, 'median_hex_cut':True, 'point_cut':True}
+    else: sig_filter_cuts = kwargs['sig_filter_cuts']
+    
+    if 'print_removed_points' not in kwargs.keys(): print_removed_points=True
+    else: print_removed_points = kwargs['print_removed_points']
+
     if print_removed_points: print('Background Data:')
     background_pt,_ = preprocess_data(background_raw_df,
                     precut_check=False,
                     postcut_check=False,
-                    point_cut=True, mm_cut=True, median_hex_cut=True,
-                    print_removed_points=print_removed_points)
+                    print_removed_points=print_removed_points,
+                    **bg_filter_cuts)
     if print_removed_points: print('Signal Data:')
     singal_pt,_ = preprocess_data(signal_raw_df,
                 precut_check=False,
                 postcut_check=False,
-                point_cut=True, mm_cut=True, median_hex_cut=True,
-                print_removed_points=print_removed_points)
+                print_removed_points=print_removed_points,
+                **sig_filter_cuts)
     diff_pt = subtract_mean_measurements(singal_pt, background_pt)
     diff_pt = add_triplet_color_label(diff_pt)
     diff_pt = add_ring_nr_label(diff_pt)
     return diff_pt
 
-def process_curing_data(full_signal_raw_df, background_raw_df, print_removed_points=False):
-    """function for applying the data_process_pipeline to a 'full_singal_raw_df' -> a dataframe which has all runs 
-    concatinated in one single dataframe. It splits the full_signal_raw_df by run_nr and applies the data_process pipeline
-    retuns: measurements_dict_pt -> dictonary of all subtracted data. key: run_nr_x; value: difference_pt"""
+def process_curing_data(full_signal_raw_df, background_raw_df, **kwargs):
+    if 'bg_filter_cuts' not in kwargs.keys():
+        bg_filter_cuts={'mm_cut':True, 'median_hex_cut':True, 'point_cut':True}
+    else: bg_filter_cuts = kwargs['bg_filter_cuts']
+    
+    if 'sig_filter_cuts' not in kwargs.keys():
+        sig_filter_cuts={'mm_cut':True, 'median_hex_cut':True, 'point_cut':True}
+    else: sig_filter_cuts = kwargs['sig_filter_cuts']
+        
     measurements_dict_pt = {}
     for run in full_signal_raw_df.run_nr.unique(): 
         data_single_run = full_signal_raw_df.loc[full_signal_raw_df.run_nr == run, :]
+        if data_single_run.size == 0: continue
         data_single_run_pt = data_process_pipeline(data_single_run, background_raw_df,
-                                                    print_removed_points=print_removed_points)
+                                                   sig_filter_cuts=sig_filter_cuts,
+                                                   bg_filter_cuts=bg_filter_cuts,)
         data_single_run_pt['run_nr'] = run
+        # print(f'Run: {run}')
+        # print('-------pt-------')
+        # print(data_single_run_pt)
+        # print('------raw-------')
+        # print(data_single_run)
         measurements_dict_pt[f'run_nr_{run}'] = data_single_run_pt
     return measurements_dict_pt
-
 
 def size_check_meas_dict_pt(meas_dict_pt): 
     """checks if runs are complete, removes run if points are missing"""
@@ -456,36 +487,58 @@ def size_check_meas_dict_pt(meas_dict_pt):
 
 
 def laser_data_analysis(meas_id_sig, meas_id_bg,
-                        meta_data:pd.DataFrame,
+                        meta_data,
                         folder='triplets',
-                        bg_data_check=False, 
-                        sig_data_check=False,
-                        print_removed_points=False,): 
-    """function to read data by measurement_id and analyse selected data"""
-    from pathlib import Path
-    measurement_folder  = Path.cwd().parent / 'measurements' / folder
-    #* read bg data
-    bfg_filename = meta_data.loc[meta_data.measurement_id==meas_id_bg].file_name.values[0]
-    print(bfg_filename)
-    bfg_df = read_single_measurement(measurement_folder, bfg_filename)
+                        **kwargs): 
+    #? catch relevant keyword arguments: 
+    if 'bg_data_check' not in kwargs.keys(): bg_data_check=False
+    else: bg_data_check = kwargs['bg_data_check']
+    
+    if 'print_removed_points' not in kwargs.keys(): print_removed_points=True
+    else: print_removed_points = kwargs['print_removed_points']
+    
+    if 'sig_data_check' not in kwargs.keys(): sig_data_check=False
+    else: sig_data_check = kwargs['sig_data_check']
+    
+    if 'bg_filter_cuts' not in kwargs.keys():
+        bg_filter_cuts={'mm_cut':True, 'median_hex_cut':True, 'point_cut':True}
+    else: bg_filter_cuts = kwargs['bg_filter_cuts']
+    
+    if 'sig_filter_cuts' not in kwargs.keys():
+        sig_filter_cuts={'mm_cut':True, 'median_hex_cut':True, 'point_cut':True}
+    else: sig_filter_cuts = kwargs['sig_filter_cuts']
+ # * change this part if importing from different source (eg. all_measurements.db)
+    bfg_df, bfg_filename = read_data_from_meas_id(folder,
+                           meas_id_bg,
+                           meta_data)
+#*--
     if bg_data_check:
+        #* plotting graphs of raw data and raw filtered data
         _,_= preprocess_data(bfg_df,
                     precut_check=True,
                     postcut_check=True,
-                    point_cut=True, mm_cut=True, median_hex_cut=True, title=bfg_filename)
-        
-    #* read singal data
-    signal_filename = meta_data.loc[meta_data.measurement_id==meas_id_sig].file_name.values[0]
-    print(signal_filename)
-    signal_df = read_single_measurement(measurement_folder, signal_filename)
+                    title=bfg_filename,
+                    **bg_filter_cuts)
+    # * change this part if importing from different source (eg. all_measurements.db)
+    signal_df, signal_filename  = read_data_from_meas_id(folder,
+                           meas_id_sig,
+                           meta_data)
+#*--
     if sig_data_check:
+        #* plotting graphs of raw data and raw filtered data
         _,_ = preprocess_data(signal_df,
                 precut_check=True,
                 postcut_check=True,
-                point_cut=True, mm_cut=True, median_hex_cut=True, title=signal_filename)
+                title=signal_filename,
+                **sig_filter_cuts)
+        
     #* process both datasets
-    meas_dict_pt = process_curing_data(signal_df, bfg_df, print_removed_points=print_removed_points)
-    meas_dict_pt = size_check_meas_dict_pt(meas_dict_pt)
+    meas_dict_pt = process_curing_data(signal_df,
+                                       bfg_df,
+                                       print_removed_points=print_removed_points,
+                                       sig_filter_cuts=sig_filter_cuts,
+                                       bg_filter_cuts=bg_filter_cuts,)
+    meas_dict_pt = size_check_meas_dict_pt(meas_dict_pt) # * kill all incomplete runs 
     return meas_dict_pt
 
 
